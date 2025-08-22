@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Programa de Lançamento de Quantidades (Online)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .card { background-color: white; border-radius: 0.75rem; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); }
+        .modal-backdrop { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); display: flex; justify-content: center; align-items: center; z-index: 50; }
+        .modal-content { background-color: white; padding: 2rem; border-radius: 0.75rem; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1); width: 90%; max-width: 500px; }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 2rem auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 p-4 md:p-8">
+
+    <div class="max-w-7xl mx-auto">
+        <div class="mb-8 text-center">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-900">Programa de Lançamento de Quantidades (Online)</h1>
+            <p class="text-gray-600 mt-2">As alterações são guardadas na nuvem em tempo real.</p>
+        </div>
+
+        <div class="card p-6 mb-8">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                    <label for="filtro-obra" class="block text-sm font-medium text-gray-700 mb-1">Filtrar por Obra</label>
+                    <select id="filtro-obra" class="w-full p-2 border border-gray-300 rounded-md shadow-sm"></select>
+                </div>
+                <div>
+                    <label for="filtro-atividade" class="block text-sm font-medium text-gray-700 mb-1">Filtrar por Atividade</label>
+                    <select id="filtro-atividade" class="w-full p-2 border border-gray-300 rounded-md shadow-sm"></select>
+                </div>
+                <div class="md:self-end">
+                    <button id="export-csv" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-md hover:bg-indigo-700">
+                        Exportar CSV Atualizado
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card overflow-x-auto">
+            <table class="w-full text-left">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="p-4 text-sm font-semibold text-gray-600">Obra</th>
+                        <th class="p-4 text-sm font-semibold text-gray-600">Atividade</th>
+                        <th class="p-4 text-sm font-semibold text-gray-600">Sub-Atividade</th>
+                        <th class="p-4 text-sm font-semibold text-gray-600 text-center">QTD. Total</th>
+                        <th class="p-4 text-sm font-semibold text-gray-600 text-center">QTD. Parcial</th>
+                        <th class="p-4 text-sm font-semibold text-gray-600 text-center">Ação</th>
+                    </tr>
+                </thead>
+                <tbody id="tabela-corpo" class="divide-y divide-gray-200">
+                    <tr><td colspan="6" class="p-8 text-center"><div class="loader"></div>A carregar dados...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="edit-modal" class="modal-backdrop hidden">
+        <div class="modal-content">
+            <h2 class="text-xl font-bold mb-4">Editar Quantidade Parcial</h2>
+            <p class="text-gray-600 mb-2"><strong>Sub-Atividade:</strong> <span id="modal-sub-atividade"></span></p>
+            <p class="text-gray-600 mb-4"><strong>QTD. Total:</strong> <span id="modal-qtd-total"></span></p>
+            <div>
+                <label for="modal-input" class="block text-sm font-medium text-gray-700 mb-1">Nova Quantidade Parcial</label>
+                <input type="number" id="modal-input" class="w-full p-2 border border-gray-300 rounded-md shadow-sm">
+            </div>
+            <div class="mt-6 flex justify-end gap-4">
+                <button id="modal-cancel" class="bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-md hover:bg-gray-300">Cancelar</button>
+                <button id="modal-save" class="bg-green-600 text-white font-bold py-2 px-4 rounded-md hover:bg-green-700">Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        // Import the functions you need from the SDKs you need
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-app.js";
+        import { getFirestore, collection, doc, getDocs, setDoc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
+
+        // Your web app's Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyDNMuHLEQPnOLjFuDGilc1p6rQBPz5wroY",
+            authDomain: "cronograma-5564c.firebaseapp.com",
+            projectId: "cronograma-5564c",
+            storageBucket: "cronograma-5564c.appspot.com",
+            messagingSenderId: "37790867989",
+            appId: "1:37790867989:web:c49d634959f7d730f8e41c"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        const URLS = {
+            obras: 'https://raw.githubusercontent.com/jonymix/CRONOGRAMA/main/TB_OBRA.csv',
+            atividades: 'https://raw.githubusercontent.com/jonymix/CRONOGRAMA/main/TB_ATIVIDADE.csv',
+            subAtividades: 'https://raw.githubusercontent.com/jonymix/CRONOGRAMA/main/TB_SUB_ATIVIDADE.csv',
+            fatoSubAtividade: 'https://raw.githubusercontent.com/jonymix/CRONOGRAMA/main/TB_FATO_SUB_ATIVIDADE.csv'
+        };
+
+        let dadosCompletos = [];
+        let dadosFatoOriginais = [];
+        let cabecalhosFatoOriginais = [];
+        let mapaObras, mapaAtividades, mapaSubAtividades;
+
+        function csvToArray(csv) {
+            const lines = csv.trim().split(/\r?\n/);
+            if (lines.length === 0) return { data: [], headers: [] };
+            const delimiter = lines[0].includes(';') ? ';' : ',';
+            const headers = lines[0].split(delimiter).map(header => header.replace(/[^\x20-\x7E]/g, '').trim());
+            const result = [];
+            for (let i = 1; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (line) {
+                    const values = line.split(delimiter).map(v => v.trim().replace(/"/g, ''));
+                    const obj = {};
+                    headers.forEach((header, index) => {
+                        obj[header] = values[index] || '';
+                    });
+                    result.push(obj);
+                }
+            }
+            return { data: result, headers: headers };
+        }
+
+        async function carregarDadosIniciais() {
+            try {
+                const [obrasRes, atividadesRes, subAtividadesRes, fatoSubAtividadeRes] = await Promise.all([
+                    fetch(URLS.obras), fetch(URLS.atividades), fetch(URLS.subAtividades), fetch(URLS.fatoSubAtividade)
+                ]);
+                for (const res of [obrasRes, atividadesRes, subAtividadesRes, fatoSubAtividadeRes]) {
+                    if (!res.ok) throw new Error(`Falha ao carregar ficheiro do GitHub: ${res.url}`);
+                }
+
+                const obrasCsv = await obrasRes.text();
+                const atividadesCsv = await atividadesRes.text();
+                const subAtividadesCsv = await subAtividadesRes.text();
+                const fatoSubAtividadeCsv = await fatoSubAtividadeRes.text();
+
+                const fatoData = csvToArray(fatoSubAtividadeCsv);
+                
+                const batch = [];
+                fatoData.data.forEach((item, index) => {
+                    // Usando ID_FATO_SUB como identificador único se existir, senão um ID sequencial
+                    const docId = item.ID_FATO_SUB ? item.ID_FATO_SUB.toString() : `id_${index}`;
+                    const docRef = doc(db, "fato_sub_atividade", docId);
+                    batch.push(setDoc(docRef, item));
+                });
+                await Promise.all(batch);
+                console.log("Base de dados do Firebase populada com sucesso!");
+
+            } catch (error) {
+                console.error("Erro crítico ao popular a base de dados:", error);
+                document.getElementById('tabela-corpo').innerHTML = `<tr><td colspan="6" class="p-8 text-center text-red-500 font-bold">FALHA AO CARREGAR DADOS INICIAIS DO GITHUB.</td></tr>`;
+            }
+        }
+
+        function processarErenderizarDados(docs) {
+            dadosFatoOriginais = docs.map(doc => ({ id_doc: doc.id, ...doc.data() }));
+
+            dadosCompletos = dadosFatoOriginais.map(fato => ({
+                ...fato,
+                NOME_OBRA: mapaObras.get(fato.COD_OBRA) || `Cód: ${fato.COD_OBRA}`,
+                NOME_ATIVIDADE: mapaAtividades.get(fato.COD_ATIVIDADE) || `Cód: ${fato.COD_ATIVIDADE}`,
+                NOME_SUB_ATIVIDADE: mapaSubAtividades.get(fato.COD_SUB_ATIVIDADE) || `Cód: ${fato.COD_SUB_ATIVIDADE}`
+            }));
+            
+            aplicarFiltros();
+        }
+
+        async function setup() {
+             try {
+                const [obrasRes, atividadesRes, subAtividadesRes] = await Promise.all([
+                    fetch(URLS.obras), fetch(URLS.atividades), fetch(URLS.subAtividades)
+                ]);
+                const obrasCsv = await obrasRes.text();
+                const atividadesCsv = await atividadesRes.text();
+                const subAtividadesCsv = await subAtividadesRes.text();
+                const obras = csvToArray(obrasCsv).data;
+                const atividades = csvToArray(atividadesCsv).data;
+                const subAtividades = csvToArray(subAtividadesCsv).data;
+
+                mapaObras = new Map(obras.map(o => [o.COD_OBRA, o.NOME_OBRA]));
+                mapaAtividades = new Map(atividades.map(a => [a.COD_ATIVIDADE, a.NOME_ATIVIDADE]));
+                mapaSubAtividades = new Map(subAtividades.map(s => [s.COD_SUB_ATIVIDADE, s.NOME_SUB_ATIVIDADE]));
+                
+                popularFiltros(obras, atividades);
+
+                const querySnapshot = await getDocs(collection(db, "fato_sub_atividade"));
+                if (querySnapshot.empty) {
+                    document.getElementById('tabela-corpo').innerHTML = `<tr><td colspan="6" class="p-8 text-center"><div class="loader"></div>A popular a base de dados pela primeira vez...</td></tr>`;
+                    await carregarDadosIniciais();
+                }
+
+                // Listener em tempo real
+                onSnapshot(collection(db, "fato_sub_atividade"), (snapshot) => {
+                    processarErenderizarDados(snapshot.docs);
+                });
+
+            } catch (error) {
+                 console.error("Erro no setup:", error);
+                 document.getElementById('tabela-corpo').innerHTML = `<tr><td colspan="6" class="p-8 text-center text-red-500 font-bold">ERRO DE CONEXÃO. Verifique a sua configuração do Firebase e a conexão à internet.</td></tr>`;
+            }
+        }
+
+        function popularFiltros(obras, atividades) {
+            const filtroObra = document.getElementById('filtro-obra');
+            const filtroAtividade = document.getElementById('filtro-atividade');
+            filtroObra.innerHTML = '<option value="all">Todas as Obras</option>';
+            filtroAtividade.innerHTML = '<option value="all">Todas as Atividades</option>';
+            
+            obras.forEach(obra => {
+                const option = document.createElement('option');
+                option.value = obra.COD_OBRA;
+                option.textContent = obra.NOME_OBRA;
+                filtroObra.appendChild(option);
+            });
+            atividades.forEach(atividade => {
+                const option = document.createElement('option');
+                option.value = atividade.COD_ATIVIDADE;
+                option.textContent = atividade.NOME_ATIVIDADE;
+                filtroAtividade.appendChild(option);
+            });
+        }
+
+        function renderizarTabela(dados) {
+            const corpoTabela = document.getElementById('tabela-corpo');
+            if (dados.length === 0) {
+                corpoTabela.innerHTML = `<tr><td colspan="6" class="p-8 text-center text-gray-500">Nenhum resultado encontrado.</td></tr>`;
+                return;
+            }
+            corpoTabela.innerHTML = dados.map(item => `
+                <tr class="hover:bg-gray-50">
+                    <td class="p-4">${item.NOME_OBRA}</td>
+                    <td class="p-4">${item.NOME_ATIVIDADE}</td>
+                    <td class="p-4 font-medium">${item.NOME_SUB_ATIVIDADE}</td>
+                    <td class="p-4 text-center">${item.QTD_TOTAL || 'N/A'}</td>
+                    <td class="p-4 text-center font-bold text-indigo-600">${item.QTD_PARCIAL || '0'}</td>
+                    <td class="p-4 text-center">
+                        <button class="edit-btn bg-blue-100 text-blue-800 text-xs font-semibold px-3 py-1 rounded-full" data-id="${item.id_doc}">Editar</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function aplicarFiltros() {
+            const codObra = document.getElementById('filtro-obra').value;
+            const codAtividade = document.getElementById('filtro-atividade').value;
+            let dadosFiltrados = dadosCompletos;
+            if (codObra !== 'all') dadosFiltrados = dadosFiltrados.filter(item => item.COD_OBRA === codObra);
+            if (codAtividade !== 'all') dadosFiltrados = dadosFiltrados.filter(item => item.COD_ATIVIDADE === codAtividade);
+            renderizarTabela(dadosFiltrados);
+        }
+        
+        const modal = document.getElementById('edit-modal');
+        const modalSaveBtn = document.getElementById('modal-save');
+        const modalCancelBtn = document.getElementById('modal-cancel');
+        const modalInput = document.getElementById('modal-input');
+        let currentEditId = null;
+
+        function openModal(id) {
+            currentEditId = id;
+            const item = dadosCompletos.find(d => d.id_doc === id);
+            if(item) {
+                document.getElementById('modal-sub-atividade').textContent = item.NOME_SUB_ATIVIDADE;
+                document.getElementById('modal-qtd-total').textContent = item.QTD_TOTAL || 'N/A';
+                modalInput.value = item.QTD_PARCIAL || '';
+                modal.classList.remove('hidden');
+                modalInput.focus();
+            }
+        }
+
+        function closeModal() {
+            currentEditId = null;
+            modal.classList.add('hidden');
+        }
+
+        async function saveChanges() {
+            if (currentEditId) {
+                const newValue = modalInput.value;
+                const docRef = doc(db, "fato_sub_atividade", currentEditId);
+                try {
+                    await updateDoc(docRef, { QTD_PARCIAL: newValue });
+                    closeModal();
+                } catch (error) {
+                    console.error("Erro ao guardar as alterações:", error);
+                    alert("Falha ao guardar as alterações. Tente novamente.");
+                }
+            }
+        }
+        
+        function exportarCSV() {
+            cabecalhosFatoOriginais = Object.keys(dadosFatoOriginais[0]).filter(h => h !== 'id_doc');
+            const headers = cabecalhosFatoOriginais.join(',');
+            const rows = dadosFatoOriginais.map(item => {
+                return cabecalhosFatoOriginais.map(header => item[header]).join(',');
+            });
+            const csvContent = [headers, ...rows].join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', 'TB_FATO_SUB_ATIVIDADE_atualizado.csv');
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        document.addEventListener('DOMContentLoaded', setup);
+        document.getElementById('filtro-obra').addEventListener('change', aplicarFiltros);
+        document.getElementById('filtro-atividade').addEventListener('change', aplicarFiltros);
+        document.getElementById('export-csv').addEventListener('click', exportarCSV);
+        
+        document.getElementById('tabela-corpo').addEventListener('click', (e) => {
+            if (e.target.classList.contains('edit-btn')) openModal(e.target.dataset.id);
+        });
+        modalCancelBtn.addEventListener('click', closeModal);
+        modalSaveBtn.addEventListener('click', saveChanges);
+        modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+        modalInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') saveChanges(); });
+
+    </script>
+</body>
+</html>
